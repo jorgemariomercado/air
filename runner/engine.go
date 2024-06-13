@@ -342,7 +342,13 @@ func (e *Engine) start() {
 			// cannot set buildDelay to 0, because when the write multiple events received in short time
 			// it will start Multiple buildRuns: https://github.com/cosmtrek/air/issues/473
 			time.Sleep(e.config.buildDelay())
-			e.flushEvents()
+
+			if e.config.Proxy.Enabled && e.isProxiedExt(filename) {
+				e.mainDebug("%s proxied file has changed", e.config.rel(filename))
+				e.proxy.Reload()
+				e.flushEvents()
+				continue
+			}
 
 			if e.config.Screen.ClearOnRebuild {
 				if e.config.Screen.KeepScroll {
