@@ -120,6 +120,12 @@ func (p *Proxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	if resp == nil {
+		http.Error(w, "proxy handler: 503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
 	defer resp.Body.Close()
 
 	// Copy the headers from the proxy response except Content-Length

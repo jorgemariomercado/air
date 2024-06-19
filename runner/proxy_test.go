@@ -72,12 +72,16 @@ func TestProxy_run(t *testing.T) {
 
 func TestProxy_proxyHandler(t *testing.T) {
 	tests := []struct {
-		name   string
-		req    func() *http.Request
-		assert func(*http.Request)
+		name         string
+		statusCode   int
+		portModifier int
+		req          func() *http.Request
+		assert       func(*http.Request)
 	}{
 		{
-			name: "get_request_with_headers",
+			name:         "get_request_with_headers",
+			statusCode:   200,
+			portModifier: 0,
 			req: func() *http.Request {
 				req := httptest.NewRequest("GET", fmt.Sprintf("http://localhost:%d", proxyPort), nil)
 				req.Header.Set("foo", "bar")
@@ -88,7 +92,9 @@ func TestProxy_proxyHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "post_form_request",
+			name:         "post_form_request",
+			statusCode:   200,
+			portModifier: 0,
 			req: func() *http.Request {
 				formData := url.Values{}
 				formData.Add("foo", "bar")
@@ -102,7 +108,9 @@ func TestProxy_proxyHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "get_request_with_query_string",
+			name:         "get_request_with_query_string",
+			statusCode:   200,
+			portModifier: 0,
 			req: func() *http.Request {
 				return httptest.NewRequest("GET", fmt.Sprintf("http://localhost:%d?q=%s", proxyPort, "air"), nil)
 			},
@@ -112,7 +120,29 @@ func TestProxy_proxyHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "put_json_request",
+			name:         "put_json_request",
+			statusCode:   200,
+			portModifier: 0,
+			req: func() *http.Request {
+				body := []byte(`{"foo": "bar"}`)
+				req := httptest.NewRequest("PUT", fmt.Sprintf("http://localhost:%d/a/b/c", proxyPort), bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+				return req
+			},
+			assert: func(resp *http.Request) {
+				type Response struct {
+					Foo string `json:"foo"`
+				}
+				var r Response
+				assert.NoError(t, json.NewDecoder(resp.Body).Decode(&r))
+				assert.Equal(t, resp.URL.Path, "/a/b/c")
+				assert.Equal(t, r.Foo, "bar")
+			},
+		},
+		{
+			name:         "put_json_request_503",
+			statusCode:   503,
+			portModifier: 1,
 			req: func() *http.Request {
 				body := []byte(`{"foo": "bar"}`)
 				req := httptest.NewRequest("PUT", fmt.Sprintf("http://localhost:%d/a/b/c", proxyPort), bytes.NewBuffer(body))
@@ -132,17 +162,28 @@ func TestProxy_proxyHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				tt.assert(r)
-			}))
+			srv := httptest.NewServer(
+				http.HandlerFunc(
+					func(_ http.ResponseWriter, r *http.Request) {
+						tt.assert(r)
+					},
+				),
+			)
 			defer srv.Close()
+
 			srvPort := getServerPort(t, srv)
+
 			proxy := NewProxy(&cfgProxy{
 				Enabled:   true,
 				ProxyPort: proxyPort,
-				AppPort:   srvPort,
+				AppPort:   srvPort + tt.portModifier,
 			})
-			proxy.proxyHandler(httptest.NewRecorder(), tt.req())
+
+			recorder := httptest.NewRecorder()
+
+			proxy.proxyHandler(recorder, tt.req())
+
+			assert.Equal(t, tt.statusCode, recorder.Result().StatusCode)
 		})
 	}
 }
