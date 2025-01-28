@@ -1,4 +1,4 @@
-module github.com/air-verse/air
+module github.com/jorgemariomercado/air
 
 go 1.23
 

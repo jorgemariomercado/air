@@ -42,6 +42,7 @@ type cfgBuild struct {
 	FullBin          string        `toml:"full_bin" usage:"Customize binary, can setup environment variables when run your app"`
 	ArgsBin          []string      `toml:"args_bin" usage:"Add additional arguments when running binary (bin/full_bin)."`
 	Log              string        `toml:"log" usage:"This log file is placed in your tmp_dir"`
+	ProxiedExt       []string      `toml:"proxied_ext" usage:"Watch these proxied filename extensions"`
 	IncludeExt       []string      `toml:"include_ext" usage:"Watch these filename extensions"`
 	ExcludeDir       []string      `toml:"exclude_dir" usage:"Ignore these filename extensions or directories"`
 	IncludeDir       []string      `toml:"include_dir" usage:"Watch these directories if you specified"`
