@@ -2,21 +2,24 @@ package runner
 
 import (
 	"bytes"
-	"errors"
+	_ "embed"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
-type Reloader interface {
+//go:embed proxy.js
+var ProxyScript string
+
+type Streamer interface {
 	AddSubscriber() *Subscriber
 	RemoveSubscriber(id int32)
 	Reload()
+	BuildFailed(msg BuildFailedMsg)
 	Stop()
 }
 
@@ -24,7 +27,7 @@ type Proxy struct {
 	server *http.Server
 	client *http.Client
 	config *cfgProxy
-	stream Reloader
+	stream Streamer
 }
 
 func NewProxy(cfg *cfgProxy) *Proxy {
@@ -45,7 +48,7 @@ func NewProxy(cfg *cfgProxy) *Proxy {
 
 func (p *Proxy) Run() {
 	http.HandleFunc("/", p.proxyHandler)
-	http.HandleFunc("/internal/reload", p.reloadHandler)
+	http.HandleFunc("/__air_internal/sse", p.reloadHandler)
 	if err := p.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(p.Stop())
 	}
@@ -55,39 +58,35 @@ func (p *Proxy) Reload() {
 	p.stream.Reload()
 }
 
-func (p *Proxy) injectLiveReload(resp *http.Response) (page string, modified bool) {
-	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
-		return page, false
-	}
+func (p *Proxy) BuildFailed(msg BuildFailedMsg) {
+	p.stream.BuildFailed(msg)
+}
 
+func (p *Proxy) injectLiveReload(resp *http.Response) (string, error) {
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		return page, false
+		return "", fmt.Errorf("proxy inject: failed to read body from http response")
 	}
-	page = buf.String()
+	page := buf.String()
 
-	// the script will be injected before the end of the body tag. In case the tag is missing, the injection will be skipped.
+	// the script will be injected before the end of the body tag. In case the tag is missing, the injection will be skipped with no error.
 	body := strings.LastIndex(page, "</body>")
 	if body == -1 {
-		return page, false
+		return page, nil
 	}
 
-	script := fmt.Sprintf(
-		`<script>new EventSource("http://localhost:%d/internal/reload").onmessage = () => { location.reload() }</script>`,
-		p.config.ProxyPort,
-	)
-	return page[:body] + script + page[body:], true
+	script := "<script>" + ProxyScript + "</script>"
+	return page[:body] + script + page[body:], nil
 }
 
 func (p *Proxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
 	appURL := r.URL
 	appURL.Scheme = "http"
 	appURL.Host = fmt.Sprintf("localhost:%d", p.config.AppPort)
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "proxy handler: bad form", http.StatusInternalServerError)
+		return
 	}
 	var body io.Reader
 	if len(r.Form) > 0 {
@@ -98,6 +97,7 @@ func (p *Proxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest(r.Method, appURL.String(), body)
 	if err != nil {
 		http.Error(w, "proxy handler: unable to create request", http.StatusInternalServerError)
+		return
 	}
 
 	// Copy the headers from the original request
@@ -108,17 +108,24 @@ func (p *Proxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("X-Forwarded-For", r.RemoteAddr)
 
-	// retry on connection refused error since after a file change air will restart the server and it may take a few milliseconds for the server to be up-and-running.
+	// set the via header
+	viaHeaderValue := fmt.Sprintf("%s %s", r.Proto, r.Host)
+	req.Header.Set("Via", viaHeaderValue)
+
+	// air will restart the server. it may take a few milliseconds for it to start back up.
+	// therefore, we retry until the server becomes available or this retry loop exits with an error.
 	var resp *http.Response
+	resp, err = p.client.Do(req)
 	for i := 0; i < 10; i++ {
-		resp, err = p.client.Do(req)
 		if err == nil {
 			break
 		}
-		if !errors.Is(err, syscall.ECONNREFUSED) {
-			http.Error(w, "proxy handler: unable to reach app", http.StatusInternalServerError)
-		}
 		time.Sleep(100 * time.Millisecond)
+		resp, err = p.client.Do(req)
+	}
+	if err != nil {
+		http.Error(w, "proxy handler: unable to reach app", http.StatusInternalServerError)
+		return
 	}
 
 	if resp == nil {
@@ -137,18 +144,26 @@ func (p *Proxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(k, v)
 		}
 	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Via", viaHeaderValue)
 	w.WriteHeader(resp.StatusCode)
 
-	page, modified := p.injectLiveReload(resp)
-	if modified {
-		w.Header().Set("Content-Length", strconv.Itoa((len([]byte(page)))))
-		if _, err := io.WriteString(w, page); err != nil {
-			http.Error(w, "proxy handler: unable to inject live reload script", http.StatusInternalServerError)
-		}
-	} else {
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
 		w.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 		if _, err := io.Copy(w, resp.Body); err != nil {
 			http.Error(w, "proxy handler: failed to forward the response body", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		page, err := p.injectLiveReload(resp)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Length", strconv.Itoa((len([]byte(page)))))
+		if _, err := io.WriteString(w, page); err != nil {
+			http.Error(w, "proxy handler: unable to inject live reload script", http.StatusInternalServerError)
+			return
 		}
 	}
 }
@@ -174,8 +189,8 @@ func (p *Proxy) reloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	for range sub.reloadCh {
-		fmt.Fprintf(w, "data: reload\n\n")
+	for msg := range sub.msgCh {
+		fmt.Fprint(w, msg.AsSSE())
 		flusher.Flush()
 	}
 }

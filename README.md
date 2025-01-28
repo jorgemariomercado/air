@@ -1,6 +1,6 @@
 # :cloud: Air - Live reload for Go apps
 
-[![Go](https://github.com/cosmtrek/air/actions/workflows/release.yml/badge.svg)](https://github.com/cosmtrek/air/actions?query=workflow%3AGo+branch%3Amaster) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/dcb95264cc504cad9c2a3d8b0795a7f8)](https://www.codacy.com/gh/cosmtrek/air/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=cosmtrek/air&amp;utm_campaign=Badge_Grade) [![Go Report Card](https://goreportcard.com/badge/github.com/cosmtrek/air)](https://goreportcard.com/report/github.com/cosmtrek/air) [![Codecov](https://codecov.io/gh/cosmtrek/air/branch/master/graph/badge.svg)](https://codecov.io/gh/cosmtrek/air)
+[![Go](https://github.com/air-verse/air/actions/workflows/release.yml/badge.svg)](https://github.com/air-verse/air/actions?query=workflow%3AGo+branch%3Amaster) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/dcb95264cc504cad9c2a3d8b0795a7f8)](https://www.codacy.com/gh/air-verse/air/dashboard?utm_source=github.com&utm_medium=referral&utm_content=air-verse/air&utm_campaign=Badge_Grade) [![Go Report Card](https://goreportcard.com/badge/github.com/air-verse/air)](https://goreportcard.com/report/github.com/air-verse/air) [![codecov](https://codecov.io/gh/air-verse/air/branch/master/graph/badge.svg)](https://codecov.io/gh/air-verse/air)
 
 ![air](docs/air.png)
 
@@ -20,15 +20,25 @@ Note: This tool has nothing to do with hot-deploy for production.
 
 ## Features
 
-* Colorful log output
-* Customize build or any command
-* Support excluding subdirectories
-* Allow watching new directories after Air started
-* Better building process
+- Colorful log output
+- Customize build or any command
+- Support excluding subdirectories
+- Allow watching new directories after Air started
+- Better building process
 
 ### Overwrite specify configuration from arguments
 
 Support air config fields as arguments:
+
+You can view the available command-line arguments by running the following commands:  
+
+```
+air -h
+```
+or  
+```
+air --help
+```
 
 If you want to config build command and run command, you can use like the following command without the config file:
 
@@ -46,20 +56,20 @@ air --build.cmd "go build -o bin/api cmd/run.go" --build.bin "./bin/api" --build
 
 ### Via `go install` (Recommended)
 
-With go 1.22 or higher:
+With go 1.23 or higher:
 
-```shell
-go install github.com/cosmtrek/air@latest
+```bash
+go install github.com/air-verse/air@latest
 ```
 
 ### Via install.sh
 
 ```shell
 # binary will be $(go env GOPATH)/bin/air
-curl -sSfL https://raw.githubusercontent.com/cosmtrek/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+curl -sSfL https://raw.githubusercontent.com/air-verse/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
 
 # or install it into ./bin/
-curl -sSfL https://raw.githubusercontent.com/cosmtrek/air/master/install.sh | sh -s
+curl -sSfL https://raw.githubusercontent.com/air-verse/air/master/install.sh | sh -s
 
 air -v
 ```
@@ -68,10 +78,10 @@ air -v
 
 ```shell
 # binary will be /usr/local/bin/air
-curl -sSfL https://goblin.run/github.com/cosmtrek/air | sh
+curl -sSfL https://goblin.run/github.com/air-verse/air | sh
 
 # to put to a custom path
-curl -sSfL https://goblin.run/github.com/cosmtrek/air | PREFIX=/tmp sh
+curl -sSfL https://goblin.run/github.com/air-verse/air | PREFIX=/tmp sh
 ```
 
 ### Docker/Podman
@@ -209,11 +219,11 @@ services:
 
 ```Dockerfile
 # Choose whatever you want, version >= 1.16
-FROM golang:1.22-alpine
+FROM golang:1.23-alpine
 
 WORKDIR /app
 
-RUN go install github.com/cosmtrek/air@latest
+RUN go install github.com/air-verse/air@latest
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -245,16 +255,16 @@ services:
 ```shell
 export GOPATH=$HOME/xxxxx
 export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
-export PATH=$PATH:$(go env GOPATH)/bin <---- Confirm this line in you profile!!!
+export PATH=$PATH:$(go env GOPATH)/bin #Confirm this line in your .profile and make sure to source the .profile if you add it!!!
 ```
 
 ### Error under wsl when ' is included in the bin
 
-Should use `\` to escape the `' in the bin. related issue: [#305](https://github.com/cosmtrek/air/issues/305)
+Should use `\` to escape the `'` in the bin. related issue: [#305](https://github.com/air-verse/air/issues/305)
 
 ### Question: how to do hot compile only and do not run anything?
 
-[#365](https://github.com/cosmtrek/air/issues/365)
+[#365](https://github.com/air-verse/air/issues/365)
 
 ```toml
 [build]
@@ -263,12 +273,11 @@ Should use `\` to escape the `' in the bin. related issue: [#305](https://github
 
 ### How to Reload the Browser Automatically on Static File Changes
 
+Refer to issue [#512](https://github.com/air-verse/air/issues/512) for additional details.
 
-Refer to issue [#512](https://github.com/cosmtrek/air/issues/512) for additional details.
-
-* Ensure your static files in `include_dir`, `include_ext`, or `include_file`.
-* Ensure your HTML has a `</body>` tag
-* Activate the proxy by configuring the following config:
+- Ensure your static files in `include_dir`, `include_ext`, or `include_file`.
+- Ensure your HTML has a `</body>` tag
+- Activate the proxy by configuring the following config:
 
 ```toml
 [proxy]
@@ -316,7 +325,7 @@ git push origin v1.xx.x
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cosmtrek/air&type=Date)](https://star-history.com/#cosmtrek/air&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=air-verse/air&type=Date)](https://star-history.com/#air-verse/air&Date)
 
 ## Sponsor
 
